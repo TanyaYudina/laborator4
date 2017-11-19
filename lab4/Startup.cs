@@ -6,14 +6,22 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using lab4.Data;
+using Microsoft.EntityFrameworkCore;
+using lab4.Middleware;
 
 namespace lab4
 {
     public class Startup
     {
-        public Startup(IConfiguration configuration)
+        public Startup(IHostingEnvironment env)
         {
-            Configuration = configuration;
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(env.ContentRootPath)
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: true);
+            builder.AddEnvironmentVariables();
+            Configuration = builder.Build();
         }
 
         public IConfiguration Configuration { get; }
@@ -21,11 +29,17 @@ namespace lab4
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            string connection = Configuration.GetConnectionString("DefaultConnection");
+            services.AddDbContext<CarsContext>(options => options.UseSqlServer(connection));
+            //добавление сессии
+            services.AddDistributedMemoryCache();
+            services.AddSession();
+
             services.AddMvc();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+        public void Configure(IApplicationBuilder app, IHostingEnvironment env, CarsContext context)
         {
             if (env.IsDevelopment())
             {
@@ -38,6 +52,11 @@ namespace lab4
             }
 
             app.UseStaticFiles();
+            // добавляем поддержку сессий
+            app.UseSession();
+
+            // добавляем компонента miidleware по инициализации базы данных
+            app.UseDbInitializer();
 
             app.UseMvc(routes =>
             {
@@ -45,6 +64,7 @@ namespace lab4
                     name: "default",
                     template: "{controller=Home}/{action=Index}/{id?}");
             });
+
         }
     }
 }
